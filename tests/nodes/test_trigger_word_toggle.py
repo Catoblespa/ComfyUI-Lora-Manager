@@ -267,3 +267,43 @@ def test_trigger_words_override_empty_toggle_data():
     )
 
     assert filtered == "custom trigger words"
+
+
+def test_selected_trigger_set_groups_are_output_with_extra_tag_fields():
+    """Tags from a non-default trigger set carry lora/setId fields and replace
+    the default groups, while the loader input still equals orinalMessage."""
+    node = TriggerWordToggleLM()
+    original_message = "iomC,, school uniform"
+    trigger_data = [
+        {
+            "text": "iomB",
+            "active": True,
+            "strength": None,
+            "lora": "rin",
+            "setId": "set-hanbok",
+            "items": [{"text": "iomB", "active": True}],
+        },
+        {
+            "text": "white hanbok, korean clothes",
+            "active": True,
+            "strength": None,
+            "lora": "rin",
+            "setId": "set-hanbok",
+            "items": [
+                {"text": "white hanbok", "active": True},
+                {"text": "korean clothes", "active": False},
+            ],
+        },
+    ]
+
+    (filtered,) = node.process_trigger_words(
+        id="node",
+        group_mode=True,
+        default_active=True,
+        allow_strength_adjustment=False,
+        orinalMessage=original_message,
+        trigger_words=original_message,
+        toggle_trigger_words=trigger_data,
+    )
+
+    assert filtered == "iomB, white hanbok"

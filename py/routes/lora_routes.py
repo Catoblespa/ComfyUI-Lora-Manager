@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from aiohttp import web
 from typing import Any, Dict
 from server import PromptServer  # pyright: ignore[reportMissingImports]
@@ -8,7 +9,16 @@ from .base_model_routes import BaseModelRoutes
 from .model_route_registrar import ModelRouteRegistrar
 from ..services.lora_service import LoraService
 from ..services.service_registry import ServiceRegistry
-from ..utils.utils import get_lora_info
+from ..utils.utils import get_lora_info, get_lora_info_absolute
+from ..utils.trigger_sets import (
+    DEFAULT_SET_ID,
+    TriggerSetValidationError,
+    build_trigger_set_list,
+    load_trigger_set_info,
+    load_trigger_sets,
+    save_trigger_sets,
+    validate_trigger_sets,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +81,14 @@ class LoraRoutes(BaseModelRoutes):
         # ComfyUI integration
         registrar.add_prefixed_route(
             "POST", "/api/lm/{prefix}/get_trigger_words", prefix, self.get_trigger_words
+        )
+
+        # Trigger sets (custom fork feature)
+        registrar.add_prefixed_route(
+            "GET", "/api/lm/{prefix}/trigger-sets", prefix, self.get_trigger_sets
+        )
+        registrar.add_prefixed_route(
+            "POST", "/api/lm/{prefix}/trigger-sets", prefix, self.update_trigger_sets
         )
 
     def _parse_specific_params(self, request: web.Request) -> Dict[str, Any]:
@@ -254,9 +272,21 @@ class LoraRoutes(BaseModelRoutes):
             node_ids = json_data.get("node_ids", [])
 
             all_trigger_words = []
+            lora_entries = []
             for lora_name in lora_names:
                 _, trigger_words = get_lora_info(lora_name)
                 all_trigger_words.extend(trigger_words)
+                set_info = self._load_lora_trigger_sets(lora_name)
+                lora_entries.append(
+                    {
+                        "name": lora_name,
+                        "trigger_words": list(trigger_words),
+                        "trigger_sets": build_trigger_set_list(
+                            trigger_words, set_info["trigger_sets"]
+                        ),
+                        "active_set_id": set_info["active_set_id"],
+                    }
+                )
 
             # Format the trigger words
             trigger_words_text = (
@@ -267,19 +297,27 @@ class LoraRoutes(BaseModelRoutes):
             for entry in node_ids:
                 node_identifier = entry
                 graph_identifier = None
+                sequence = None
                 if isinstance(entry, dict):
                     node_identifier = entry.get("node_id")
                     graph_identifier = entry.get("graph_id")
+                    sequence = entry.get("seq")
 
                 try:
                     parsed_node_id = int(node_identifier)  # pyright: ignore[reportArgumentType]
                 except (TypeError, ValueError):
                     parsed_node_id = node_identifier
 
-                payload = {"id": parsed_node_id, "message": trigger_words_text}
+                payload = {
+                    "id": parsed_node_id,
+                    "message": trigger_words_text,
+                    "loras": lora_entries,
+                }
 
                 if graph_identifier is not None:
                     payload["graph_id"] = str(graph_identifier)
+                if isinstance(sequence, int):
+                    payload["seq"] = sequence
 
                 PromptServer.instance.send_sync("trigger_word_update", payload)
 
@@ -287,4 +325,69 @@ class LoraRoutes(BaseModelRoutes):
 
         except Exception as e:
             logger.error(f"Error getting trigger words: {e}")
+            return web.json_response({"success": False, "error": str(e)}, status=500)
+
+    @staticmethod
+    def _load_lora_trigger_sets(lora_name):
+        try:
+            absolute_path, _ = get_lora_info_absolute(lora_name)
+            return load_trigger_set_info(absolute_path)
+        except Exception as e:
+            logger.warning(f"Error loading trigger sets for {lora_name}: {e}")
+            return {"trigger_sets": [], "active_set_id": DEFAULT_SET_ID}
+
+    async def _is_known_lora_path(self, file_path: str) -> bool:
+        target = os.path.normcase(os.path.normpath(file_path))
+        cache = await self.service.scanner.get_cached_data()
+        for item in cache.raw_data:
+            item_path = item.get("file_path")
+            if item_path and os.path.normcase(os.path.normpath(item_path)) == target:
+                return True
+        return False
+
+    async def get_trigger_sets(self, request: web.Request) -> web.Response:
+        """Get the additional trigger sets stored for a LoRA file"""
+        try:
+            file_path = request.query.get("file_path")
+            if not file_path:
+                return web.json_response(
+                    {"success": False, "error": "file_path is required"}, status=400
+                )
+            if not await self._is_known_lora_path(file_path):
+                return web.json_response(
+                    {"success": False, "error": "Unknown LoRA file"}, status=404
+                )
+            return web.json_response(
+                {"success": True, "trigger_sets": load_trigger_sets(file_path)}
+            )
+        except Exception as e:
+            logger.error(f"Error getting trigger sets: {e}", exc_info=True)
+            return web.json_response({"success": False, "error": str(e)}, status=500)
+
+    async def update_trigger_sets(self, request: web.Request) -> web.Response:
+        """Replace the additional trigger sets of a LoRA (trainedWords untouched)"""
+        try:
+            json_data = await request.json()
+            file_path = json_data.get("file_path")
+            if not file_path:
+                return web.json_response(
+                    {"success": False, "error": "file_path is required"}, status=400
+                )
+            try:
+                trigger_sets = validate_trigger_sets(json_data.get("trigger_sets"))
+            except TriggerSetValidationError as e:
+                return web.json_response({"success": False, "error": str(e)}, status=400)
+            if not await self._is_known_lora_path(file_path):
+                return web.json_response(
+                    {"success": False, "error": "Unknown LoRA file"}, status=404
+                )
+            try:
+                saved = await save_trigger_sets(file_path, trigger_sets)
+            except FileNotFoundError:
+                return web.json_response(
+                    {"success": False, "error": "Metadata file not found"}, status=404
+                )
+            return web.json_response({"success": True, "trigger_sets": saved})
+        except Exception as e:
+            logger.error(f"Error saving trigger sets: {e}", exc_info=True)
             return web.json_response({"success": False, "error": str(e)}, status=500)
