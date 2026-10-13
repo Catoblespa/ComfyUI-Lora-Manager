@@ -400,8 +400,17 @@ export function collectActiveLorasFromChain(node, visited = new Set()) {
 export function updateConnectedTriggerWords(node, loraNames) {
     const connectedNodes = getConnectedTriggerToggleNodes(node);
     if (connectedNodes.length > 0) {
+        // Each toggle node tracks the latest request sent to it so it can
+        // ignore responses that arrive out of order.
         const nodeIds = connectedNodes
-            .map((connectedNode) => getNodeReference(connectedNode))
+            .map((connectedNode) => {
+                const reference = getNodeReference(connectedNode);
+                if (reference) {
+                    connectedNode._lmTriggerSeq = (connectedNode._lmTriggerSeq || 0) + 1;
+                    reference.seq = connectedNode._lmTriggerSeq;
+                }
+                return reference;
+            })
             .filter((reference) => reference !== null);
 
         if (nodeIds.length === 0) {

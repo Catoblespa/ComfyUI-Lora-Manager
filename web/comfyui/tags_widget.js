@@ -653,7 +653,7 @@ export function addTagsWidget(node, name, opts, callback, wheelSensitivity = 0.0
   const container = document.createElement("div");
   container.className = "comfy-tags-container";
 
-  const { allowStrengthAdjustment = true } = options;
+  const { allowStrengthAdjustment = true, renderHeader = null } = options;
 
   forwardMiddleMouseToCanvas(container);
   forwardWheelToCanvas(container);
@@ -902,6 +902,10 @@ export function addTagsWidget(node, name, opts, callback, wheelSensitivity = 0.0
     const normalizedTags = Array.isArray(tagsData) ? tagsData : [];
     const showStrengthInfo = widget.allowStrengthAdjustment ?? allowStrengthAdjustment;
     const groupAnchors = new Map();
+
+    if (typeof renderHeader === "function") {
+      renderHeader(container, widget);
+    }
 
     if (normalizedTags.length === 0) {
       closeGroupEditor(widget);

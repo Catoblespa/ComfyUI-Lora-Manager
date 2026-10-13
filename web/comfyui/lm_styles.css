@@ -784,3 +784,53 @@ body.lm-lora-reordering * {
   color: #4299E0 !important;
   -webkit-text-fill-color: #4299E0 !important;
 }
+
+/* Trigger set selector rows shown above the tags of a TriggerWord Toggle node. */
+.lm-trigger-set-bar {
+  flex: 0 0 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.lm-trigger-set-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.lm-trigger-set-lora {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.85);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+.lm-trigger-set-option {
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(226, 232, 240, 0.75);
+  cursor: pointer;
+}
+
+.lm-trigger-set-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lm-trigger-set-option--active {
+  border-color: #4299E0;
+  background: rgba(66, 153, 224, 0.3);
+  color: #fff;
+}

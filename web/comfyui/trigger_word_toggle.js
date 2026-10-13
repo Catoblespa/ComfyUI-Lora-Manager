@@ -3,79 +3,23 @@ import { api } from "../../scripts/api.js";
 import { CONVERTED_TYPE, getNodeFromGraph } from "./utils.js";
 import { addTagsWidget } from "./tags_widget.js";
 import { getWheelSensitivity } from "./settings.js";
+import {
+  DEFAULT_SET_ID,
+  buildTagsForLoras,
+  buildTagsFromGroups,
+  cloneTag,
+  isStaleUpdate,
+  lorasWithSelectableSets,
+  parseSetState,
+  serializeSetState,
+  shortLoraName,
+  splitMessageGroups,
+  splitTopLevelCommas,
+  switchSet,
+} from "./trigger_sets_utils.js";
 
 function normalizeTagText(text) {
   return typeof text === "string" ? text.trim().toLowerCase() : "";
-}
-
-function splitTopLevelCommas(text) {
-  if (typeof text !== "string" || !text.trim()) {
-    return [];
-  }
-
-  const parts = [];
-  let current = "";
-  let depth = 0;
-
-  for (const char of text) {
-    if (char === "(") {
-      depth += 1;
-      current += char;
-      continue;
-    }
-    if (char === ")") {
-      depth = Math.max(0, depth - 1);
-      current += char;
-      continue;
-    }
-    if (char === "," && depth === 0) {
-      const trimmed = current.trim();
-      if (trimmed) {
-        parts.push(trimmed);
-      }
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-
-  const trimmed = current.trim();
-  if (trimmed) {
-    parts.push(trimmed);
-  }
-
-  return parts;
-}
-
-function isGroupTag(tag) {
-  return Array.isArray(tag?.items);
-}
-
-function parseSerializedText(text) {
-  const normalizedText = typeof text === "string" ? text.trim() : "";
-  const strengthMatch = normalizedText.match(/^\((.+):([\d.]+)\)$/);
-  if (!strengthMatch) {
-    return {
-      text: normalizedText,
-      strength: null,
-    };
-  }
-
-  const parsedStrength = Number(strengthMatch[2]);
-  return {
-    text: strengthMatch[1].trim(),
-    strength: Number.isFinite(parsedStrength) ? parsedStrength : null,
-  };
-}
-
-function cloneTag(tag) {
-  if (!isGroupTag(tag)) {
-    return { ...tag };
-  }
-  return {
-    ...tag,
-    items: tag.items.map((item) => ({ ...item })),
-  };
 }
 
 function collectHighlightTokens(wordsArray) {
@@ -107,72 +51,58 @@ function collectHighlightTokens(wordsArray) {
   return tokens;
 }
 
-function buildLegacyTagState(existingTags, allowStrengthAdjustment) {
-  return existingTags.reduce((acc, tag) => {
-    const parsed = parseSerializedText(tag.text);
-    const key = parsed.text;
-    if (!acc[key]) {
-      acc[key] = [];
-    }
-    acc[key].push({
-      active: tag.active,
-      strength:
-        allowStrengthAdjustment
-          ? (tag.strength !== undefined && tag.strength !== null ? tag.strength : parsed.strength)
-          : null,
-    });
-    return acc;
-  }, {});
-}
-
-function buildGroupState(existingTags, allowStrengthAdjustment) {
-  return existingTags.reduce((acc, tag) => {
-    const parsed = parseSerializedText(tag.text);
-    const key = parsed.text;
-    if (!acc[key]) {
-      acc[key] = [];
-    }
-
-    const itemState = {};
-    if (Array.isArray(tag.items)) {
-      tag.items.forEach((item) => {
-        const itemKey = item.text;
-        if (!itemState[itemKey]) {
-          itemState[itemKey] = [];
-        }
-        itemState[itemKey].push({
-          active: item.active,
-        });
-      });
-    } else {
-      splitTopLevelCommas(tag.text).forEach((itemText) => {
-        if (!itemState[itemText]) {
-          itemState[itemText] = [];
-        }
-        itemState[itemText].push({
-          active: tag.active,
-        });
-      });
-    }
-
-    acc[key].push({
-      active: tag.active,
-      strength:
-        allowStrengthAdjustment
-          ? (tag.strength !== undefined && tag.strength !== null ? tag.strength : parsed.strength)
-          : null,
-      itemState,
-    });
-    return acc;
-  }, {});
-}
-
-function consumeQueuedState(stateMap, key) {
-  const queue = stateMap[key];
-  if (queue && queue.length > 0) {
-    return queue.shift();
+function persistSetState(node) {
+  if (node.triggerSetStateWidget && node._lmSetState) {
+    node.triggerSetStateWidget.value = serializeSetState(node._lmSetState);
   }
-  return null;
+}
+
+// Radio rows (one per LoRA that has extra trigger sets), rendered above the tags.
+function renderTriggerSetHeader(node, container) {
+  const state = node._lmSetState;
+  if (!node._lmUseSets || !state) {
+    return;
+  }
+  const loras = lorasWithSelectableSets(state);
+  if (loras.length === 0) {
+    return;
+  }
+
+  const bar = document.createElement("div");
+  bar.className = "lm-trigger-set-bar";
+
+  loras.forEach((lora) => {
+    const row = document.createElement("div");
+    row.className = "lm-trigger-set-row";
+
+    const label = document.createElement("span");
+    label.className = "lm-trigger-set-lora";
+    label.textContent = shortLoraName(lora.name);
+    label.title = lora.name;
+    row.appendChild(label);
+
+    const selectedId = state.selected[lora.name] || DEFAULT_SET_ID;
+    lora.trigger_sets.forEach((set) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "lm-trigger-set-option";
+      if (set.id === selectedId) {
+        option.classList.add("lm-trigger-set-option--active");
+      }
+      option.textContent = set.id === DEFAULT_SET_ID ? "Default" : set.name;
+      option.title = (set.groups || []).join("\n");
+      option.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        node.selectTriggerSet?.(lora.name, set.id);
+      });
+      row.appendChild(option);
+    });
+
+    bar.appendChild(row);
+  });
+
+  container.appendChild(bar);
 }
 
 app.registerExtension({
@@ -180,8 +110,8 @@ app.registerExtension({
 
   setup() {
     api.addEventListener("trigger_word_update", (event) => {
-      const { id, graph_id: graphId, message } = event.detail;
-      this.handleTriggerWordUpdate(id, graphId, message);
+      const { id, graph_id: graphId, message, loras, seq } = event.detail;
+      this.handleTriggerWordUpdate(id, graphId, message, loras, seq);
     });
   },
 
@@ -206,6 +136,7 @@ app.registerExtension({
         defaultVal: [],
       }, null, wheelSensitivity, {
         allowStrengthAdjustment: initialStrengthAdjustment,
+        renderHeader: (container) => renderTriggerSetHeader(node, container),
       });
 
       node.tagWidget = result.widget;
@@ -267,9 +198,28 @@ app.registerExtension({
       hiddenWidget.computeSize = () => [0, -4];
       node.originalMessageWidget = hiddenWidget;
 
+      // Added after every pre-existing widget so saved widgets_values of
+      // workflows/images created before trigger sets keep their indices.
+      const setStateWidget = node.addWidget("text", "trigger_set_state", "");
+      setStateWidget.type = CONVERTED_TYPE;
+      setStateWidget.hidden = true;
+      setStateWidget.computeSize = () => [0, -4];
+      node.triggerSetStateWidget = setStateWidget;
+
       const tagWidgetIndex = node.widgets.indexOf(result.widget);
       const originalMessageWidgetIndex = node.widgets.indexOf(hiddenWidget);
+      const setStateWidgetIndex = node.widgets.indexOf(setStateWidget);
       if (node.widgets_values && node.widgets_values.length > 0) {
+        if (setStateWidgetIndex >= 0 && setStateWidgetIndex < node.widgets_values.length) {
+          const savedState = node.widgets_values[setStateWidgetIndex];
+          if (savedState) {
+            setStateWidget.value = typeof savedState === "string" ? savedState : JSON.stringify(savedState);
+          }
+        }
+        // Restore the set state before the tags so the header renders with them.
+        node._lmSetState = parseSetState(setStateWidget.value);
+        node._lmUseSets = node._lmSetState.loras.length > 0;
+
         if (tagWidgetIndex >= 0) {
           const savedValue = node.widgets_values[tagWidgetIndex];
           if (savedValue) {
@@ -282,16 +232,37 @@ app.registerExtension({
             hiddenWidget.value = originalMessage;
           }
         }
+      } else {
+        node._lmSetState = parseSetState(setStateWidget.value);
+        node._lmUseSets = false;
       }
+
+      node.selectTriggerSet = (loraName, setId) => {
+        const state = node._lmSetState;
+        if (!state || !node.tagWidget) {
+          return;
+        }
+        node.tagWidget.closeGroupEditor?.();
+        const currentTags = (node.tagWidget.value || []).map(cloneTag);
+        if (!switchSet(state, currentTags, loraName, setId)) {
+          return;
+        }
+        this.updateTagsBasedOnMode(
+          node,
+          node.originalMessageWidget?.value || "",
+          groupModeWidget?.value ?? false,
+          Boolean(strengthAdjustmentWidget?.value)
+        );
+      };
 
       requestAnimationFrame(() => node.applyTriggerHighlightState?.());
 
       groupModeWidget.callback = (value) => {
         node.tagWidget?.closeGroupEditor?.();
-        if (node.originalMessageWidget?.value) {
+        if (node.originalMessageWidget?.value || node._lmUseSets) {
           this.updateTagsBasedOnMode(
             node,
-            node.originalMessageWidget.value,
+            node.originalMessageWidget?.value || "",
             value,
             Boolean(strengthAdjustmentWidget?.value)
           );
@@ -378,15 +349,27 @@ app.registerExtension({
     });
   },
 
-  handleTriggerWordUpdate(id, graphId, message) {
+  handleTriggerWordUpdate(id, graphId, message, loras, seq) {
     const node = getNodeFromGraph(graphId, id);
     if (!node || node.comfyClass !== "TriggerWord Toggle (LoraManager)") {
       console.warn("Node not found or not a TriggerWordToggle:", id);
       return;
     }
 
+    if (isStaleUpdate(node, seq)) {
+      return;
+    }
+
     if (node.originalMessageWidget) {
       node.originalMessageWidget.value = message;
+    }
+
+    if (Array.isArray(loras)) {
+      if (!node._lmSetState) {
+        node._lmSetState = parseSetState(node.triggerSetStateWidget?.value);
+      }
+      node._lmSetState.loras = loras;
+      node._lmUseSets = true;
     }
 
     if (node.tagWidget) {
@@ -406,48 +389,27 @@ app.registerExtension({
 
     const existingTags = (node.tagWidget.value || []).map(cloneTag);
     const defaultActive = node.widgets[1] ? node.widgets[1].value : true;
-    let tagArray = [];
+    let tagArray;
 
-    if (groupMode) {
-      const existingGroupState = buildGroupState(existingTags, allowStrengthAdjustment);
-      const groups = message.trim()
-        ? (message.includes(",,") ? message.split(/,{2,}/) : [message])
-            .map((group) => group.trim())
-            .filter(Boolean)
-        : [];
-
-      tagArray = groups.map((group) => {
-        const existing = consumeQueuedState(existingGroupState, group);
-        const itemState = existing?.itemState || {};
-        const items = splitTopLevelCommas(group).map((itemText) => {
-          const savedItem = consumeQueuedState(itemState, itemText);
-          return {
-            text: itemText,
-            active: savedItem ? savedItem.active : true,
-            highlighted: false,
-            strength: null,
-          };
-        });
-
-        return {
-          text: group,
-          active: existing ? existing.active : defaultActive,
-          highlighted: false,
-          strength: existing ? existing.strength : null,
-          items,
-        };
+    if (node._lmUseSets && node._lmSetState) {
+      tagArray = buildTagsForLoras({
+        loras: node._lmSetState.loras,
+        state: node._lmSetState,
+        existingTags,
+        groupMode,
+        defaultActive,
+        allowStrengthAdjustment,
       });
+      persistSetState(node);
     } else {
-      const existingTagState = buildLegacyTagState(existingTags, allowStrengthAdjustment);
-      tagArray = splitTopLevelCommas(message).map((word) => {
-        const existing = consumeQueuedState(existingTagState, word);
-        return {
-          text: word,
-          active: existing ? existing.active : defaultActive,
-          highlighted: false,
-          strength: existing ? existing.strength : null,
-        };
-      });
+      const groups = groupMode ? splitMessageGroups(message) : [message];
+      tagArray = buildTagsFromGroups(
+        groups,
+        existingTags,
+        groupMode,
+        defaultActive,
+        allowStrengthAdjustment
+      );
     }
 
     node.tagWidget.value = tagArray;
