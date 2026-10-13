@@ -1,6 +1,12 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { CONVERTED_TYPE, getNodeFromGraph } from "./utils.js";
+import {
+  CONVERTED_TYPE,
+  collectActiveLorasFromChain,
+  getLinkFromGraph,
+  getNodeFromGraph,
+  updateConnectedTriggerWords,
+} from "./utils.js";
 import { addTagsWidget } from "./tags_widget.js";
 import { getWheelSensitivity } from "./settings.js";
 import {
@@ -55,6 +61,23 @@ function persistSetState(node) {
   if (node.triggerSetStateWidget && node._lmSetState) {
     node.triggerSetStateWidget.value = serializeSetState(node._lmSetState);
   }
+}
+
+// Ask the LoRA Manager node feeding our trigger_words input to resend its
+// trigger words, so set info is available right after a workflow loads
+// (including workflows saved before trigger sets existed).
+function requestTriggerRefresh(node) {
+  const inputIndex = (node.inputs || []).findIndex((input) => input?.name === "trigger_words");
+  const linkId = inputIndex >= 0 ? node.inputs[inputIndex].link : null;
+  if (linkId === null || linkId === undefined) {
+    return;
+  }
+  const link = getLinkFromGraph(node.graph, linkId);
+  const source = link ? node.graph?.getNodeById?.(link.origin_id) : null;
+  if (!source || typeof source.comfyClass !== "string" || !source.comfyClass.endsWith("(LoraManager)")) {
+    return;
+  }
+  updateConnectedTriggerWords(source, collectActiveLorasFromChain(source));
 }
 
 // Radio rows (one per LoRA that has extra trigger sets), rendered above the tags.
@@ -255,6 +278,17 @@ app.registerExtension({
         );
       };
 
+      // An update may have arrived before this widget existed (common while a
+      // workflow loads); apply it now instead of losing it. Otherwise ask the
+      // connected loader for fresh trigger words and sets.
+      const pendingUpdate = node.__pendingTriggerUpdate;
+      delete node.__pendingTriggerUpdate;
+      if (pendingUpdate) {
+        this.applyTriggerWordUpdate(node, pendingUpdate.message, pendingUpdate.loras);
+      } else {
+        requestTriggerRefresh(node);
+      }
+
       requestAnimationFrame(() => node.applyTriggerHighlightState?.());
 
       groupModeWidget.callback = (value) => {
@@ -360,6 +394,15 @@ app.registerExtension({
       return;
     }
 
+    if (!node.tagWidget) {
+      node.__pendingTriggerUpdate = { message, loras };
+      return;
+    }
+
+    this.applyTriggerWordUpdate(node, message, loras);
+  },
+
+  applyTriggerWordUpdate(node, message, loras) {
     if (node.originalMessageWidget) {
       node.originalMessageWidget.value = message;
     }

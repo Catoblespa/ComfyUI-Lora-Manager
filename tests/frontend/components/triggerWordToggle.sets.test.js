@@ -22,9 +22,15 @@ vi.mock(APP_MODULE, () => ({
 
 vi.mock(API_MODULE, () => ({ api: { addEventListener: vi.fn() } }));
 
+const updateConnectedTriggerWords = vi.fn();
+const collectActiveLorasFromChain = vi.fn(() => new Set(["rin"]));
+
 vi.mock(UTILS_MODULE, () => ({
   CONVERTED_TYPE: "converted-widget",
   getNodeFromGraph: (_graphId, id) => nodesById.get(id) ?? null,
+  getLinkFromGraph: (graph, linkId) => graph?.links?.[linkId] ?? null,
+  updateConnectedTriggerWords,
+  collectActiveLorasFromChain,
 }));
 
 vi.mock(SETTINGS_MODULE, () => ({ getWheelSensitivity: () => 0.02 }));
@@ -79,11 +85,22 @@ function createNode(widgetsValues) {
   return node;
 }
 
-async function setupNode(widgetsValues) {
+async function setupNode(widgetsValues, beforeInit) {
   await import(TOGGLE_MODULE);
   const node = createNode(widgetsValues);
+  beforeInit?.(node);
   await extensionState.current.nodeCreated(node);
   return node;
+}
+
+function connectLoader(node) {
+  const loader = { id: 7, comfyClass: "Lora Loader (LoraManager)" };
+  node.inputs = [{ name: "trigger_words", link: 3 }];
+  node.graph = {
+    links: { 3: { origin_id: 7 } },
+    getNodeById: (id) => (id === 7 ? loader : null),
+  };
+  return loader;
 }
 
 describe("TriggerWord Toggle trigger sets", () => {
@@ -91,7 +108,43 @@ describe("TriggerWord Toggle trigger sets", () => {
     vi.resetModules();
     nodesById.clear();
     headerCalls.length = 0;
+    updateConnectedTriggerWords.mockClear();
     vi.stubGlobal("requestAnimationFrame", (cb) => cb());
+  });
+
+  it("keeps an update that arrives before the widget exists (workflow load)", async () => {
+    let rafCallback = null;
+    vi.stubGlobal("requestAnimationFrame", (cb) => {
+      if (!rafCallback) {
+        rafCallback = cb;
+      } else {
+        cb();
+      }
+    });
+    await import(TOGGLE_MODULE);
+    const node = createNode([true, true, false, [], ""]);
+    await extensionState.current.nodeCreated(node);
+
+    // Loader restored first and already sent its trigger words.
+    extensionState.current.handleTriggerWordUpdate(1, null, "iomC", [{ ...rin, active_set_id: "set-hanbok" }]);
+    rafCallback();
+
+    expect(node.tagWidget.value.map((t) => t.text)).toEqual(["iomB, hanbok"]);
+    expect(headerCalls.at(-1).querySelectorAll(".lm-trigger-set-option").length).toBe(2);
+    expect(updateConnectedTriggerWords).not.toHaveBeenCalled();
+  });
+
+  it("asks the connected loader for fresh trigger sets once ready", async () => {
+    let loader;
+    await setupNode([true, true, false, [], "iomC"], (node) => {
+      loader = connectLoader(node);
+    });
+    expect(updateConnectedTriggerWords).toHaveBeenCalledWith(loader, new Set(["rin"]));
+  });
+
+  it("does not request a refresh when nothing is connected", async () => {
+    await setupNode(undefined);
+    expect(updateConnectedTriggerWords).not.toHaveBeenCalled();
   });
 
   it("appends the set state widget after all pre-existing widgets", async () => {
