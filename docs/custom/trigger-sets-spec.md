@@ -92,8 +92,19 @@ LoRA 하나에 여러 벌의 트리거 단어 묶음("트리거셋")을 저장�
 
 - [x] git 세팅 (origin=포크, upstream=원본, v1.2.1 기준 `feature/trigger-sets`)
 - [x] 요구사항 명세 복원 (이 문서)
-- [ ] 데이터 모델 + API
-- [ ] 모달 UI
-- [ ] Toggle 노드 (라디오, 게이팅, LoRA 표시)
-- [ ] 쌍 독립성 / LoRA off 시 제거 버그 방지
-- [ ] 저장/복원 + 구버전 이미지 후방호환
+- [x] 데이터 모델 + API (`py/utils/trigger_sets.py`, `py/routes/lora_routes.py`)
+- [x] 모달 UI (`static/js/components/shared/TriggerSets.js`)
+- [x] Toggle 노드 (라디오, 게이팅, LoRA 표시) (`web/comfyui/trigger_sets_utils.js`, `trigger_word_toggle.js`)
+- [x] 쌍 독립성 / LoRA off 시 제거 버그 방지 (노드별 seq, 전역 상태 없음)
+- [x] 저장/복원 + 구버전 이미지 후방호환 (숨김 위젯 `trigger_set_state`는 맨 뒤, 구버전 tag는 text로 매칭)
+- [ ] ComfyUI 실사용 E2E 확인 (모달 → 노드 3쌍 → 실행 출력 → 워크플로/이미지 복원)
+
+## 7. 구현 메모
+
+- 저장 위치: 최상위 `trigger_sets` + `active_trigger_set_id`.
+  - 첫 구현이 쓰던 `civitai.triggerSets` / `civitai.activeTriggerSetId`도 읽는다.
+  - 모달에서 한 번 저장하면 최상위 키로 옮겨진다.
+- `active_trigger_set_id`: 노드에 LoRA가 처음 나타날 때 처음 선택될 셋이다. 그 뒤로는 노드별로 선택한 셋을 따른다.
+- 노드 상태: `trigger_set_state` 숨김 위젯(JSON)에 `{loras, selected, stash}`를 저장한다.
+  - `stash`에는 셋별 그룹 on/off 상태를 보관해서, 셋을 바꿨다가 돌아와도 상태가 복원된다.
+- `trigger_word_update` 이벤트의 `message`는 원본과 똑같다. 셋 정보는 `loras` 필드로만 전달된다.

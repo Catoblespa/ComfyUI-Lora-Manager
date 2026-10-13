@@ -1490,6 +1490,19 @@
           "loading": "Loading suggestions..."
         }
       },
+      "triggerSets": {
+        "label": "Trigger Sets",
+        "hint": "The default set is the trigger words above. Pick a set in the TriggerWord Toggle node.",
+        "add": "Add trigger set",
+        "delete": "Delete trigger set",
+        "copyDefault": "Add groups from the default trigger words",
+        "deleteGroup": "Remove group",
+        "namePlaceholder": "Set name",
+        "newName": "Trigger set {index}",
+        "groupPlaceholder": "Add a group (comma separated words), press Enter",
+        "empty": "No extra trigger sets",
+        "loadFailed": "Failed to load trigger sets"
+      },
       "description": {
         "noDescription": "No model description available",
         "failedToLoad": "Failed to load model description",
@@ -2132,6 +2145,11 @@
       "updateSuccess": "Trigger words updated successfully",
       "updateFailed": "Failed to update trigger words",
       "copyFailed": "Copy failed"
+    },
+    "triggerSets": {
+      "saved": "Trigger sets saved",
+      "saveFailed": "Failed to save trigger sets",
+      "nameRequired": "Every trigger set needs a name"
     },
     "undo": {
       "action": "Undo",

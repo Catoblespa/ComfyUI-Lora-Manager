@@ -146,3 +146,99 @@
   border-radius: 8px;
   white-space: nowrap;
 }
+
+/* Trigger sets (custom fork feature) */
+.trigger-sets {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.trigger-sets-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.trigger-sets-hint,
+.trigger-sets-empty {
+  font-size: 0.85em;
+  opacity: 0.7;
+  margin-bottom: var(--space-1);
+}
+
+.trigger-sets-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.trigger-set-card {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-xs);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trigger-set-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trigger-set-name {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-xs);
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.trigger-set-copy-btn,
+.trigger-set-delete-btn,
+.trigger-set-group-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.trigger-set-copy-btn:hover,
+.trigger-set-group-delete:hover {
+  opacity: 1;
+}
+
+.trigger-set-delete-btn:hover {
+  opacity: 1;
+  color: var(--lora-error, #e53e3e);
+}
+
+.trigger-set-groups {
+  width: 100%;
+}
+
+.trigger-set-group .trigger-word-content {
+  max-width: none;
+  white-space: normal;
+}
+
+.trigger-set-group-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.trigger-sets-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-1);
+}

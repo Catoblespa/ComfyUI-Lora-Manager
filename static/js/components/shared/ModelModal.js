@@ -18,6 +18,7 @@ import { setupTagEditMode } from './ModelTags.js';
 import { getModelApiClient } from '../../api/modelApiFactory.js';
 import { renderCompactTags, setupTagTooltip, formatFileSize, escapeAttribute, escapeHtml } from './utils.js';
 import { renderTriggerWords, setupTriggerWordsEditMode } from './TriggerWords.js';
+import { renderTriggerSetsSection, setupTriggerSets } from './TriggerSets.js';
 import { parsePresets, renderPresetTags } from './PresetTags.js';
 import { initVersionsTab } from './ModelVersionsTab.js';
 import { loadRecipesForModel } from './RecipeTab.js';
@@ -796,6 +797,7 @@ export async function showModelModal(model, modelType) {
     }
 
     if (modelType === 'loras') {
+        setupTriggerSets(modelWithFullData.file_path);
         loadRecipesForModel({
             modelKind: 'lora',
             displayName: modelWithFullData.model_name,
@@ -841,6 +843,7 @@ function renderLoraSpecificContent(lora, escapedWords) {
             </div>
         </div>
         ${renderTriggerWords(escapedWords, lora.file_path)}
+        ${renderTriggerSetsSection(lora.file_path)}
     `;
 }
 

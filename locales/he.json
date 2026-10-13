@@ -1490,6 +1490,19 @@
                     "loading": "טוען הצעות..."
                 }
             },
+            "triggerSets": {
+                "label": "[TODO: Translate] Trigger Sets",
+                "hint": "[TODO: Translate] The default set is the trigger words above. Pick a set in the TriggerWord Toggle node.",
+                "add": "[TODO: Translate] Add trigger set",
+                "delete": "[TODO: Translate] Delete trigger set",
+                "copyDefault": "[TODO: Translate] Add groups from the default trigger words",
+                "deleteGroup": "[TODO: Translate] Remove group",
+                "namePlaceholder": "[TODO: Translate] Set name",
+                "newName": "[TODO: Translate] Trigger set {index}",
+                "groupPlaceholder": "[TODO: Translate] Add a group (comma separated words), press Enter",
+                "empty": "[TODO: Translate] No extra trigger sets",
+                "loadFailed": "[TODO: Translate] Failed to load trigger sets"
+            },
             "description": {
                 "noDescription": "אין תיאור מודל זמין",
                 "failedToLoad": "טעינת תיאור המודל נכשלה",
@@ -2132,6 +2145,11 @@
             "updateSuccess": "מילות הטריגר עודכנו בהצלחה",
             "updateFailed": "עדכון מילות הטריגר נכשל",
             "copyFailed": "ההעתקה נכשלה"
+        },
+        "triggerSets": {
+            "saved": "[TODO: Translate] Trigger sets saved",
+            "saveFailed": "[TODO: Translate] Failed to save trigger sets",
+            "nameRequired": "[TODO: Translate] Every trigger set needs a name"
         },
         "undo": {
             "action": "בטל",
